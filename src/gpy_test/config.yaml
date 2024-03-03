@@ -1,0 +1,19 @@
+integral_config: 
+  type_: dblsimpson
+  n_points: 250
+fixed_point_config:
+  init_m_real: 1
+  init_m_imag: 1
+  max_steps: 100
+  tolerance: 1e-2
+contour_config_pair:
+  - imag_height: 0.2
+    real_slack: 0.2
+    type_: ellipse
+  - imag_height: 0.1
+    real_slack: 0.1
+    type_: ellipse
+derivative_epsilon: 1e-8
+admissible_imag: 1e-3
+n_jobs: -1
+verbose: true
