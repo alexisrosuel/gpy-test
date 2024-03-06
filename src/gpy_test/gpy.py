@@ -1,3 +1,4 @@
+from math import floor
 from typing import Optional
 
 import numpy as np
@@ -50,17 +51,23 @@ def GPY(
     # start by validating the input
     _validate(y, fs, Cov, covariance_config, sd)
 
-    # follow GPY method of splitting the time series in two
+    # follow GPY method of splitting the time series in two along the dimension axis (not the time one!)
     N, M = y.shape
-    half_N = int(N / 2)
-    y_1, y_2 = y[:half_N], y[half_N:]
-    S_1 = y_1.T @ y_1.conj() / half_N
-    S_2 = y_2.T @ y_2.conj() / (N - half_N)
+    half_M = floor(M / 2)
+    y_1, y_2 = y[:, :half_M], y[:, half_M:2*half_M]
+    S_1 = y_1.conj() @ y_1.T / half_M
+    S_2 = y_2.conj() @ y_2.T / (M-half_M)
     eigs_1 = np.linalg.eigvalsh(S_1)
     eigs_2 = np.linalg.eigvalsh(S_2)
-    f_eigs_1 = np.array([[f(eig) for eig in eigs_1] for f in fs])
-    f_eigs_2 = np.array([[f(eig) for eig in eigs_2] for f in fs])
-    lss = M * np.mean(f_eigs_2 - f_eigs_1, axis=1)
+
+    # comnpute the lss 
+    lsss = [] 
+    for f in fs:
+        f1 = np.array([f(eig) for eig in eigs_1])
+        f2 = np.array([f(eig) for eig in eigs_2])
+        lss = N * np.mean(f2 - f1)
+        lsss.append(lss)
+    lsss = np.array(lsss)
 
     # limiting distribution of the lss statistics is gaussian with known mean and covariance
     mean = np.zeros(len(fs))
@@ -70,10 +77,10 @@ def GPY(
             fs,
             sd,
             (min(eigs_1), max(eigs_1)),
-            c=M / N,
+            c=N / M,
         )
 
-    test_statistic = (lss - mean).reshape(1, -1) @ np.linalg.inv(Cov) @ (lss - mean)
+    test_statistic = (lsss - mean).reshape(1, -1) @ np.linalg.inv(Cov) @ (lsss - mean)
     test_statistic = test_statistic[0]
-    p_value = 1 - chi2.cdf(test_statistic, len(lss))
-    return GPYResult(p_value, test_statistic, N, M, lss, mean, Cov, eigs_1, eigs_2)
+    p_value = 1 - chi2.cdf(test_statistic, len(lsss))
+    return GPYResult(p_value, test_statistic, N, M, lsss, mean, Cov, eigs_1, eigs_2)

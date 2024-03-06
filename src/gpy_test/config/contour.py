@@ -12,4 +12,4 @@ class ContourConfig(BaseModel):
 
     imag_height: PositiveFloat  # height of the contour in the imaginary axis
     real_slack: NonNegativeFloat  # slack to add around the estimated eigenvalues
-    type_: Literal["rectangle", "ellipse", "circle"]
+    type_: Literal["rectangle", "ellipse", "circle"] # issues of convergence with "rectangle" as it is not a differentiable contour.

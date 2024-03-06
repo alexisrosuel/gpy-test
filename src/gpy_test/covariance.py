@@ -1,3 +1,4 @@
+import cmath
 from typing import Callable
 
 import numpy as np
@@ -9,9 +10,9 @@ from tqdm import tqdm
 from gpy_test.config.covariance import CovarianceConfig
 from gpy_test.config.fixed_point import FixedPointConfig
 from gpy_test.contour import contour
-from gpy_test.integration import complex_dblquad, dblsimpson
 from gpy_test.types import f64_1d, f64_2d, real_function
-from gpy_test.utils import derivative
+from gpy_test.utils.derivative import derivative
+from gpy_test.utils.integration import complex_dblquad, dblsimpson
 
 
 def _A(
@@ -22,7 +23,7 @@ def _A(
         freqs, values = sd
         return simpson(
             y=1 / (c * z + 1 / values),
-            x=freqs,
+            x=freqs
         )
     else:
         return quad(
@@ -44,6 +45,7 @@ def _m(
     """Fixed point iteration to solve the m equation."""
     # set tolerance one order of magnitude less than the tolerance in the fixed point iteration
     func = lambda m: 1 / (-z + _A(sd, c, m, fixed_point_config.tolerance / 10))
+    # func = lambda m: 1 / (-z + 1-c-c*z*m)
     return fixed_point(
         func,
         fixed_point_config.init_m,
@@ -60,6 +62,22 @@ def _m_bar(
     c: float,
     fixed_point: FixedPointConfig,
 ) -> float:
+    # a = (z+1-c)**2 - 4*z
+
+    # # choose the sqrt root that has a positive imaginary part (ie angle between 0 and pi)
+    # radius, angle = cmath.polar(a)
+    # sqrt_radius = np.sqrt(radius)
+    # if angle / 2 > 0 and angle / 2 < np.pi:
+    #     sqrt_angle = angle / 2
+    # else: 
+    #     sqrt_angle = angle / 2 + np.pi
+    
+    # sqrt_a = sqrt_radius * cmath.exp(1j * sqrt_angle)
+    # assert np.imag(sqrt_a) > 0
+    # assert np.isclose(sqrt_a**2, a)
+
+    # return (-(z+1-c)+sqrt_a) / (2*z)
+
     return -(1 - c) / z + c * _m(z, sd, c, fixed_point)
 
 
@@ -94,13 +112,10 @@ def _omega_ij(
     covariance_config: CovarianceConfig,
     f1: real_function,
     f2: real_function,
-    i1: int,
-    i2: int,
     sd: real_function | tuple[f64_1d, f64_1d],
     eig_range: tuple[float, float],
     c: float,
-) -> tuple[float, tuple[real_function, real_function]]:
-
+) -> float:
     # define integrand parametrized by the contour
     integrand = _integrand(
         f1,
@@ -142,7 +157,7 @@ def _omega_ij(
         raise ValueError(msg)
 
     # return also the indices of the pair of functions (required for parallel computation of covariance entries)
-    return np.real(omega_ij), (i1, i2)
+    return np.real(omega_ij)
 
 
 def _is_definite_non_negative(matrix: f64_2d) -> bool:
@@ -171,8 +186,17 @@ def covariance(
     if covariance_config.verbose:
         tasks = tqdm(tasks)
 
+    # define the function to be computed in parallel, which returns also the indices of the pair of functions
+    def _compute_omega_ij_with_indices(
+        covariance_config, f1, f2, i1, i2, sd, eigs_range, c
+    ):
+        cov = _omega_ij(covariance_config, f1, f2, sd, eigs_range, c)
+        return cov, (i1, i2)
+
     results = Parallel(n_jobs=covariance_config.n_jobs)(
-        delayed(_omega_ij)(covariance_config, f1, f2, i1, i2, sd, eigs_range, c)
+        delayed(_compute_omega_ij_with_indices)(
+            covariance_config, f1, f2, i1, i2, sd, eigs_range, c
+        )
         for f1, f2, i1, i2 in tasks
     )
 

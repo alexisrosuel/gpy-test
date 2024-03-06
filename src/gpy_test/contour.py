@@ -12,10 +12,10 @@ def _ellipse(
     """Complex a ellipse countour, with edge points at min_x + min_y i, max_x + max_y i, max_x - max_y i, min_x - min_y i.
     Oriented counter-clockwise.
     """
-    x = lambda t: (min_x + max_x) / 2 + (max_x - min_x) / 2 * np.cos(t * 2 * np.pi)
-    dx = lambda t: -(max_x - min_x) / 2 * np.sin(t * 2 * np.pi) * 2 * np.pi
-    y = lambda t: (min_y + max_y) / 2 + (max_y - min_y) / 2 * np.sin(t * 2 * np.pi)
-    dy = lambda t: (max_y - min_y) / 2 * np.cos(t * 2 * np.pi) * 2 * np.pi
+    x = lambda t: (min_x + max_x) / 2 + (max_x - min_x) / 2 * np.cos(-t * 2 * np.pi)
+    dx = lambda t: (max_x - min_x) / 2 * np.sin(t * 2 * np.pi) * 2 * np.pi
+    y = lambda t: (min_y + max_y) / 2 + (max_y - min_y) / 2 * np.sin(-t * 2 * np.pi)
+    dy = lambda t: -(max_y - min_y) / 2 * np.cos(t * 2 * np.pi) * 2 * np.pi
     z = lambda t: x(t) + 1j * y(t)
     dz = lambda t: dx(t) + 1j * dy(t)
     return z, dz
@@ -88,8 +88,8 @@ def _circle(
     """Complex a circle countour, with edge points at min_x + min_y i, min_x + max_y i, max_x + min_y i, min_x + min_y i.
     Oriented counter-clockwise.
     """
-    z = lambda t: min_x + (max_x - min_x) * np.exp(1j * t * 2 * np.pi)
-    dz = lambda t: 1j * (max_x - min_x) * np.exp(1j * t * 2 * np.pi) * 2 * np.pi
+    z = lambda t: min_x + (max_x - min_x) * np.exp(-1j * t * 2 * np.pi)
+    dz = lambda t: -1j * 2 * np.pi * (max_x - min_x) * np.exp(-1j * t * 2 * np.pi)
     return z, dz
 
 

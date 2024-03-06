@@ -1,6 +1,5 @@
 import pytest
-
-from gpy_test.gpy import _A, _m
+from gpy_test.covariance import _A, _m
 
 
 @pytest.mark.parametrize(
