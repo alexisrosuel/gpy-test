@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 
+import numpy as np
+
 from gpy_test.types import f64_1d, f64_2d
 
 
@@ -10,13 +12,22 @@ class GPYResult:
     N: int
     M: int
     LSSs_diff: f64_1d
-    # limit statistics
     covariance: f64_2d
-    # diagnostics
-    # half_covariances: tuple[f64_2d, f64_2d]
-    # eigenvalues_half_covariance: tuple[f64_1d, f64_1d]
-    # LSSs_halfs: tuple[f64_2d, f64_2d]
 
     @property
     def c(self) -> float:
         return self.M / self.N
+
+    def __eq__(self, other):
+        if not isinstance(other, GPYResult):
+            return NotImplemented
+        return (
+            np.isclose(self.p_value, other.p_value, rtol=1e-5, atol=1e-8)
+            and np.isclose(
+                self.test_statistic, other.test_statistic, rtol=1e-5, atol=1e-8
+            )
+            and self.N == other.N
+            and self.M == other.M
+            and np.allclose(self.LSSs_diff, other.LSSs_diff, rtol=1e-5, atol=1e-8)
+            and np.allclose(self.covariance, other.covariance, rtol=1e-5, atol=1e-8)
+        )

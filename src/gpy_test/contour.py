@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Callable
 
@@ -12,16 +14,16 @@ class Contour:
     dz: Callable[[float], complex]
     t_range: tuple[float, float]
 
-
-def _circle(center: float, radius: float) -> Contour:
-    """Complex a circle countour, with edge points at min_x + min_y i,
-    min_x + max_y i, max_x + min_y i, min_x + min_y i.
-    Oriented counter-clockwise.
-    """
-    z = lambda t: center + radius * np.exp(-1j * t * 2 * np.pi)
-    dz = lambda t: -1j * 2 * np.pi * radius * np.exp(-1j * t * 2 * np.pi)
-    t_range = (0, 1)
-    return Contour(z, dz, t_range)
+    @classmethod
+    def from_circle_parameters(cls, center: float, radius: float) -> Contour:
+        """Complex a circle countour, with edge points at min_x + min_y i,
+        min_x + max_y i, max_x + min_y i, min_x + min_y i.
+        Oriented counter-clockwise.
+        """
+        z = lambda t: center + radius * np.exp(-1j * t * 2 * np.pi)
+        dz = lambda t: -1j * 2 * np.pi * radius * np.exp(-1j * t * 2 * np.pi)
+        t_range = (0, 1)
+        return cls(z, dz, t_range)
 
 
 def create_contour(
@@ -37,7 +39,7 @@ def create_contour(
     if contour_config.type_ == "circle":
         center = (contour_range[0] + contour_range[1]) / 2
         radius = (contour_range[1] - contour_range[0]) / 2
-        contour = _circle(center, radius)
+        contour = Contour.from_circle_parameters(center, radius)
     else:
         raise ValueError(f"Unknown contour type: {contour_config.type_}")
 

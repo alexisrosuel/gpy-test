@@ -1,35 +1,129 @@
-import pytest
+import pickle
 
-from gpy_test.covariance import _A, _m
+import numpy as np
+import pytest
+from gpy_test.config.covariance import CovarianceConfig
+from gpy_test.covariance import (
+    _check_real_definite_non_negative,
+    _integrand,
+    compute_covariance,
+)
 
 
 @pytest.mark.parametrize(
-    "m, sd, c, expected",
+    "c, f_pair, eigenvalues, z1, z2, expected",
     [
-        (1 + 1j, lambda x: 1, 1, 0.4000000000000001 - 0.20000000000000004j),
+        (
+            0.5,
+            (lambda x: x, lambda x: x**2),
+            [0.5, 1, 1.5, 2],
+            10 + 0j,
+            9 + 1j,
+            18.21879933978403 - 81.0562716179145j,
+        )
     ],
 )
-def test__A(m, sd, c, expected):
-    assert _A(m, sd, c) == expected
+def test__integrand(c, f_pair, eigenvalues, z1, z2, expected):
+    integrand_function = _integrand(c, f_pair, np.array(eigenvalues))
+    assert integrand_function(z1, z2) == expected
 
 
 @pytest.mark.parametrize(
-    "z, sd, c, expected",
-    [(1 + 1j, lambda x: 1, 1, -0.10692431068530435 + 0.6360098231439529j)],
+    "matrix, tolerance_negative, tolerance_imag, expected_exception",
+    [
+        (
+            np.array([[2, 0], [0, 3]]),
+            1e-9,
+            1e-9,
+            None,
+        ),  # valid case: all eigenvalues are positive and real
+        (
+            np.array([[1, 1], [1, 1]]),
+            1e-9,
+            1e-9,
+            None,
+        ),  # valid case: eigenvalues are 2 and 0 (positive and real)
+        (
+            np.array([[1, 0], [0, -1]]),
+            1e-9,
+            1e-9,
+            ValueError,
+        ),  # invalid case: negative eigenvalue
+        (
+            np.array([[0, 1], [1, 0]]),
+            1e-9,
+            1e-9,
+            ValueError,
+        ),  # invalid case: imaginary eigenvalues
+        (
+            np.array([[1, 1e-10], [1e-10, 1]]),
+            1e-9,
+            1e-9,
+            None,
+        ),  # valid case: very small off-diagonal values
+        (
+            np.array([[1, 0], [0, 1]]),
+            1e-9,
+            None,
+            None,
+        ),  # valid case: tolerance_imag is None, check only for negative eigenvalues
+        (
+            np.array([[1, 0], [0, 1]]),
+            None,
+            1e-9,
+            None,
+        ),  # valid case: tolerance_negative is None, check only for real eigenvalues
+        (
+            np.array([[1j, 0], [0, 1j]]),
+            None,
+            1e-9,
+            ValueError,
+        ),  # invalid case: purely imaginary eigenvalues
+    ],
 )
-def test__m(z, sd, c, expected):
-    assert _m(z, sd, c) == expected
+def test_check_real_definite_non_negative(
+    matrix, tolerance_negative, tolerance_imag, expected_exception
+):
+    if expected_exception:
+        with pytest.raises(expected_exception):
+            _check_real_definite_non_negative(
+                matrix, tolerance_negative, tolerance_imag
+            )
+    else:
+        _check_real_definite_non_negative(matrix, tolerance_negative, tolerance_imag)
 
 
-# @pytest.mark.parametrize(
-#     "lrv_config, expected_lrv_result",
-#     [
-#         (
-#             GPYConfig(L=2, f=lambda x: (x - 1) ** 2, n_points_density=3),
-#             None,
-#         )
-#     ],
-# )
-# def test_GPY(lrv_config, expected_lrv_result):
-#     y = np.arange(10 * 2).reshape(10, 2)
-#     assert GPY(y, lrv_config) == expected_lrv_result
+def test_compute_covariance(covariance_data_path, request):
+    fs = [lambda x: x, lambda x: x**2]
+    XTX_eigenvalues = np.linspace(0, 2, 10)
+    c = 0.5
+    covariance_config = CovarianceConfig(
+        **{
+            "integral_config": {
+                "epsabs": 1e-2,
+                "epsrel": 1e-2,
+            },
+            "contour_pair_config": {
+                "contours": [
+                    {"real_slack": 1, "type_": "circle"},
+                    {"real_slack": 2, "type_": "circle"},
+                ]
+            },
+            "admissible_imag": 1e-3,
+            "admissible_negative": 1e2,
+            "n_jobs": 1,
+            "verbose": False,
+        }
+    )
+    result = compute_covariance(fs, XTX_eigenvalues, c, covariance_config)
+
+    if request.config.getoption("--regenerate"):
+        with open(covariance_data_path, "wb") as f:
+            pickle.dump(result, f)
+
+    with open(covariance_data_path, "rb") as f:
+        expected_output = pickle.load(f)
+
+    assert np.allclose(
+        result, expected_output, rtol=1e-5, atol=1e-8
+    ), "Computed covariance does not match the expected result"

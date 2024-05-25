@@ -15,19 +15,21 @@ from gpy_test.types import f64_1d, f64_2d, real_function
 def _integrand(
     c: float,
     f_pair: tuple[real_function, real_function],
-    eigenvalues: tuple[f64_1d, f64_1d],
+    eigenvalues: f64_1d,
 ) -> Callable[[complex, complex], complex]:
-    """Integrand of the covariance integral as defined in the paper.
+    """
+    Integrand of the covariance integral as defined in the paper.
 
     Note that the eigenvalues of both "half data matrices" are passed. z1 will be applued only to the
-    first half, while z2 will be applied to the second half."""
+    first half, while z2 will be applied to the second half.
+    """
     f1, f2 = f_pair
     CONSTANT = -(1 / (2 * np.pi**2))  # compute upfront the constant
 
     def integrd(z1: complex, z2: complex) -> complex:
         # the eigenvalues of (XTX-zI)^(-1) are simply the 1/(lambda_i -z)
-        eigs_minus_z1 = 1 / (eigenvalues[0] - z1)
-        eigs_minus_z2 = 1 / (eigenvalues[1] - z2)
+        eigs_minus_z1 = 1 / (eigenvalues - z1)
+        eigs_minus_z2 = 1 / (eigenvalues - z2)
 
         # compute the Stieljes transforms
         m_z1 = np.mean(eigs_minus_z1)
@@ -59,10 +61,16 @@ def _integrand(
 def _omega_ij(
     c: float,
     f_pair: tuple[real_function, real_function],
-    XTX_eigenvalues: tuple[f64_1d, f64_1d],
+    XTX_eigenvalues: f64_1d,
     contour_pair: tuple[Contour, Contour],
     covariance_config: CovarianceConfig,
+    compute_imaginary_part: bool = False,
 ) -> complex:
+    """
+    compute_imaginary_part also computes the imaginary part of the integral.
+    This can be used as an additional convergence check, since we now this quantity
+    should be zero.
+    """
     # define integrand parametrized by the contour
     integrand = _integrand(c, f_pair, XTX_eigenvalues)
 
@@ -84,39 +92,46 @@ def _omega_ij(
         covariance_config.integral_config.epsabs,
         covariance_config.integral_config.epsrel,
     )[0]
-    # omega_ij_imag = dblquad(
-    #    lambda t1, t2: np.imag(integrand_reparametrized(t1, t2)),
-    #    contour_1.t_range[0],
-    #    contour_1.t_range[1],
-    #    lambda t: contour_2.t_range[0],
-    #    lambda t: contour_2.t_range[1],
-    #    (),
-    #    covariance_config.integral_config.epsabs,
-    #    covariance_config.integral_config.epsrel,
-    # )[0]
 
-    return omega_ij_real  # + 1j * omega_ij_imag
+    if compute_imaginary_part:
+        omega_ij_imag = dblquad(
+            lambda t1, t2: np.imag(integrand_reparametrized(t1, t2)),
+            contour_1.t_range[0],
+            contour_1.t_range[1],
+            lambda t: contour_2.t_range[0],
+            lambda t: contour_2.t_range[1],
+            (),
+            covariance_config.integral_config.epsabs,
+            covariance_config.integral_config.epsrel,
+        )[0]
+    else:
+        omega_ij_imag = 0
+
+    return omega_ij_real + 1j * omega_ij_imag
 
 
-def _check_definite_non_negative(
-    matrix: f64_2d, tolerance_imag: float, tolerance_negative: float
+def _check_real_definite_non_negative(
+    matrix: f64_2d,
+    tolerance_negative: Optional[float] = None,
+    tolerance_imag: Optional[float] = None,
 ) -> None:
-    """Check if a matrix is definite non-negative."""
     eigs = np.linalg.eigvals(matrix)
 
-    # check all eigs are reals
-    if np.any(np.abs(np.imag(eigs)) > tolerance_imag):
-        msg = (
-            "Convergence issue: the eigenvalues of the limit covariance matrix "
-            f"are not real: {matrix=}, {eigs=}"
-        )
-        raise ValueError(msg)
-
     # check all eigs are positive
-    eigs = np.real(eigs)  # keep only the real part
-    if np.any(eigs < -tolerance_negative):
-        msg = f"Convergence issue: the limit covariance matrix is not definite non-negative: {matrix=}, {eigs=}"
-        raise ValueError(msg)
+    if tolerance_negative is not None:
+        eigs = np.real(eigs)  # keep only the real part
+        if np.any(eigs < -tolerance_negative):
+            msg = f"Convergence issue: the limit covariance matrix is not definite non-negative: {matrix=}, {eigs=}"
+            raise ValueError(msg)
+
+    # check all eigs are reals
+    if tolerance_imag is not None:
+        if np.any(np.abs(np.imag(eigs)) > tolerance_imag):
+            msg = (
+                "Convergence issue: the eigenvalues of the limit covariance matrix "
+                f"are not real: {matrix=}, {eigs=}"
+            )
+            raise ValueError(msg)
 
 
 def _load_default_covariance_config() -> CovarianceConfig:
@@ -129,10 +144,14 @@ def _load_default_covariance_config() -> CovarianceConfig:
 
 def compute_covariance(
     fs: tuple[real_function, ...],
-    XTX_eigenvalues: tuple[f64_1d, f64_1d] | f64_1d,
+    XTX_eigenvalues: f64_1d,
     c: float,
     covariance_config: Optional[CovarianceConfig] = None,
 ) -> f64_2d:
+    """
+    Compute an estimate of the limit covariance matrix of Linear Spectral Statistics
+    based on the empirical covariance matrix XTX.
+    """
     # if covariance config is not defined, use the default one
     covariance_config = covariance_config or _load_default_covariance_config()
 
@@ -140,8 +159,12 @@ def compute_covariance(
     # the eigvenvalues of XTX, with a good margin to ensure numerical stability
     # in the integral computation.
     eig_range = (np.min(XTX_eigenvalues), np.max(XTX_eigenvalues))
-    contour_1 = create_contour(covariance_config.contour_config_pair[0], eig_range)
-    contour_2 = create_contour(covariance_config.contour_config_pair[1], eig_range)
+    contour_1 = create_contour(
+        covariance_config.contour_pair_config.contours[0], eig_range
+    )
+    contour_2 = create_contour(
+        covariance_config.contour_pair_config.contours[1], eig_range
+    )
 
     tasks = []
     for i1, f1 in enumerate(fs):
@@ -150,23 +173,12 @@ def compute_covariance(
             if i1 > i2:
                 continue
 
-            # the author suggests to split the eigenvalues per half covariance
-            if isinstance(XTX_eigenvalues, tuple):
-                if i1 == 0 and i2 == 0:
-                    effective_eigs = (XTX_eigenvalues[0], XTX_eigenvalues[0])
-                elif i1 == 1 and i2 == 1:
-                    effective_eigs = (XTX_eigenvalues[1], XTX_eigenvalues[1])
-                else:
-                    effective_eigs = XTX_eigenvalues
-            else:
-                effective_eigs = (XTX_eigenvalues, XTX_eigenvalues)
-
             task = (
                 i1,
                 i2,
                 c,
                 (f1, f2),
-                effective_eigs,
+                XTX_eigenvalues,
                 (contour_1, contour_2),
                 covariance_config,
             )
@@ -191,10 +203,10 @@ def compute_covariance(
         covariance[i1, i2] = omega_ij
         covariance[i2, i1] = omega_ij
 
-    _check_definite_non_negative(
+    _check_real_definite_non_negative(
         covariance,
-        covariance_config.admissible_imag,
         covariance_config.admissible_negative,
+        covariance_config.admissible_imag,
     )
 
     return np.real(covariance)

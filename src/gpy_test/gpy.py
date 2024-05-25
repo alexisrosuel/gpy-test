@@ -69,18 +69,13 @@ def GPY(
     # Limit covariance of the LSSs
     Cov = compute_covariance(
         fs,
-        # XTX_eigenvalues = np.linalg.eigvalsh(y @ y.conj().T / M),
-        XTX_eigenvalues=(
-            np.linalg.eigvalsh(sub_ys[0] @ sub_ys[0].conj().T * 2 / M),
-            np.linalg.eigvalsh(sub_ys[1] @ sub_ys[1].conj().T * 2 / M),
-        ),
+        XTX_eigenvalues=np.linalg.eigvalsh(y @ y.conj().T / M),
         c=T / M,
         covariance_config=covariance_config,
     )
 
     # since we take the difference of the same random variable distribution,
-    # mean is zero
-    # cov is scaled by 2
+    # mean is zero and cov is scaled by 2
     mean = 0
     Cov *= 2
 
