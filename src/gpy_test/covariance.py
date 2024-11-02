@@ -32,22 +32,22 @@ def _integrand(
         eigs_minus_z2 = 1 / (eigenvalues - z2)
 
         # compute the Stieljes transforms
-        m_z1 = np.mean(eigs_minus_z1)
-        m_z2 = np.mean(eigs_minus_z2)
+        m_bar_z1 = np.mean(eigs_minus_z1) / c
+        m_bar_z2 = np.mean(eigs_minus_z2) / c
 
         # compute the derivatives with respect to z
-        dm_z1 = np.mean(eigs_minus_z1**2)
-        dm_z2 = np.mean(eigs_minus_z2**2)
+        dm_bar_z1 = np.mean(eigs_minus_z1**2) / c
+        dm_bar_z2 = np.mean(eigs_minus_z2**2) / c
 
         # finally get the Stieltes transforms of the transpose matrices
-        m_bar_z1 = -(1 - c) / z1 + c * m_z1
-        m_bar_z2 = -(1 - c) / z2 + c * m_z2
-        dm_bar_z1 = (1 - c) / z1**2 + c * dm_z1
-        dm_bar_z2 = (1 - c) / z2**2 + c * dm_z2
+        # m_bar_z1 = -(1 - c) / z1 + c * m_z1
+        # m_bar_z2 = -(1 - c) / z2 + c * m_z2
+        # dm_bar_z1 = (1 - c) / z1**2 + c * dm_z1
+        # dm_bar_z2 = (1 - c) / z2**2 + c * dm_z2
 
         return (
             CONSTANT
-            * 4  # I don't know why we need this factor. It is in the code provided by the author though
+            # * 4  # I don't know why we need this factor. It is in the code provided by the author though
             * f1(z1)
             * f2(z2)
             * dm_bar_z1
@@ -64,7 +64,6 @@ def _omega_ij(
     XTX_eigenvalues: f64_1d,
     contour_pair: tuple[Contour, Contour],
     covariance_config: CovarianceConfig,
-    compute_imaginary_part: bool = False,
 ) -> complex:
     """
     compute_imaginary_part also computes the imaginary part of the integral.
@@ -82,7 +81,7 @@ def _omega_ij(
         * contour_2.dz(t2)
     )
 
-    omega_ij_real = dblquad(
+    omega_ij_real, precision = dblquad(
         lambda t1, t2: np.real(integrand_reparametrized(t1, t2)),
         contour_1.t_range[0],
         contour_1.t_range[1],
@@ -91,8 +90,9 @@ def _omega_ij(
         (),
         covariance_config.integral_config.epsabs,
         covariance_config.integral_config.epsrel,
-    )[0]
+    )
 
+    compute_imaginary_part = covariance_config.admissible_imag is not None
     if compute_imaginary_part:
         omega_ij_imag = dblquad(
             lambda t1, t2: np.imag(integrand_reparametrized(t1, t2)),
@@ -120,7 +120,8 @@ def _check_real_definite_non_negative(
     # check all eigs are positive
     if tolerance_negative is not None:
         eigs = np.real(eigs)  # keep only the real part
-        if np.any(eigs < -tolerance_negative):
+        negative_eigs = eigs[eigs < 0]
+        if np.sum(negative_eigs) / np.sum(np.abs(eigs)) > tolerance_negative:
             msg = f"Convergence issue: the limit covariance matrix is not definite non-negative: {matrix=}, {eigs=}"
             raise ValueError(msg)
 

@@ -31,11 +31,11 @@ def create_contour(
 ) -> Contour:
     min_eig, max_eig = eig_range
     eig_diameter = max_eig - min_eig
-    eig_diameter = max(eig_diameter, 5)  # if only one eigenvalue, set diameter to 5
     contour_range = (
-        min_eig - contour_config.real_slack * eig_diameter,
-        max_eig + contour_config.real_slack * eig_diameter,
+        min_eig - contour_config.real_slack * 0.5 * eig_diameter,
+        max_eig + contour_config.real_slack * 0.5 * eig_diameter,
     )
+
     if contour_config.type_ == "circle":
         center = (contour_range[0] + contour_range[1]) / 2
         radius = (contour_range[1] - contour_range[0]) / 2

@@ -163,3 +163,6 @@ cython_debug/
 # data generated for notebooks
 notebooks/data/
 *.csv*
+
+# other 
+*.DS_Store

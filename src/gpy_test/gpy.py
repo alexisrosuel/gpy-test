@@ -25,10 +25,7 @@ def _apply_functions_to_eigenvalues(
     return np.array(results)
 
 
-def _LSSs(y: f64_2d, fs: list[real_function]) -> f64_1d:
-    T, M = y.shape
-    half_covariance = y @ y.conj().T / M
-    eigenvalues = np.linalg.eigvalsh(half_covariance)
+def _LSSs(eigenvalues: f64_1d, fs: list[real_function]) -> f64_1d:
     f_eigs = _apply_functions_to_eigenvalues(eigenvalues, fs)
     LSSs = np.sum(f_eigs, axis=1)
     assert len(LSSs) == len(fs)
@@ -64,13 +61,42 @@ def GPY(
     # this allow to remove the recentering terms
     half_M = floor(M / 2)
     sub_ys = [y[:, :half_M], y[:, half_M : 2 * half_M]]
-    LSSs_diff = _LSSs(sub_ys[0], fs) - _LSSs(sub_ys[1], fs)
 
-    # Limit covariance of the LSSs
+    # compute all the eigenvalues of y @ y.T (and y.T @ y as they differ only by
+    # some 0s). Use the fastest method depending on the relative values of T and M
+    if T >= half_M:
+        # eigenvalues = [
+        #     np.linalg.eigvalsh(sub_y.conj().T @ sub_y) for sub_y in sub_ys
+        # ]
+        svs = [np.linalg.svd(sub_y, full_matrices=False)[1] for sub_y in sub_ys]
+        eigenvalues = [sv**2 for sv in svs]
+        assert len(eigenvalues[0]) == half_M
+
+        yty_eigenvalues = eigenvalues
+        yyt_eigenvalues = [np.pad(eigs, (0, T - half_M)) for eigs in eigenvalues]
+
+    else:
+        # eigenvalues = [
+        #     np.linalg.eigvalsh(sub_y @ sub_y.conj().T )
+        #     for sub_y in sub_ys
+        # ]
+        svs = [np.linalg.svd(sub_y.T, full_matrices=False)[1] for sub_y in sub_ys]
+        eigenvalues = [sv**2 for sv in svs]
+        assert len(eigenvalues[0]) == T
+
+        yty_eigenvalues = [np.pad(eigs, (0, half_M - T)) for eigs in eigenvalues]
+        yyt_eigenvalues = eigenvalues
+
+    assert len(yty_eigenvalues[0]) == half_M
+    assert len(yyt_eigenvalues[0]) == T
+
+    LSSs_diff = _LSSs(yyt_eigenvalues[0] / half_M, fs) - _LSSs(
+        yyt_eigenvalues[1] / half_M, fs
+    )
     Cov = compute_covariance(
         fs,
-        XTX_eigenvalues=np.linalg.eigvalsh(y @ y.conj().T / M),
-        c=T / M,
+        XTX_eigenvalues=yty_eigenvalues[0] / half_M,
+        c=T / half_M,
         covariance_config=covariance_config,
     )
 
@@ -85,7 +111,7 @@ def GPY(
 
     # limiting distribution of the lss statistics is gaussian with zero mean and known covariance
     test_statistic = quadratic_form(LSSs_diff - mean, np.linalg.inv(Cov))
-    dof = len(LSSs_diff)
+    dof = len(fs)
     p_value = 1 - chi2.cdf(test_statistic, dof)
 
     return GPYResult(
