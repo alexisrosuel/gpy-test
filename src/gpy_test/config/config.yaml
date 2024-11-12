@@ -1,0 +1,13 @@
+integral_config: 
+  epsabs: 1e-5
+  epsrel: 1e-5
+contour_pair_config:
+  contours: 
+    - real_slack: 1
+      type_: circle
+    - real_slack: 2
+      type_: circle
+admissible_imag:
+admissible_negative: 1e-5
+n_jobs: 1
+verbose: False

@@ -1,0 +1,11 @@
+pydantic
+numpy
+ruamel.yaml
+scipy
+joblig
+tqdm
+
+# pytest
+# conda-build
+# black
+# ipykernel
