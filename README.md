@@ -22,36 +22,16 @@ eprint = {
 # How to use
 ```
 from gpy_test import GPY
+import numpy as np
 
 # get some data, shape is (number of time samples, number of dimensions)
-y = np.array(...)
-
-# define the gpy config 
-from gpy_test import GPY, CovarianceConfig
-
-d = {
-    "integral_config": {
-        "epsabs": 1e-2,
-        "epsrel": 1e-2,
-    },
-    "contour_pair_config": {
-        "contours": [
-            {"real_slack": 1, "type_": "circle"},
-            {"real_slack": 2, "type_": "circle"},
-        ]
-    },
-    "admissible_imag": 1e-3,
-    "admissible_negative": 1e2,
-    "n_jobs": 1,
-    "verbose": False,
-}
-covariance_config = CovarianceConfig(**d)
+y = np.arange(100*10).reshape(100, 10)
 
 # Choose the test functions
 fs = [lambda x: x, lambda x: x**2]
 
 # run the test 
-result = GPY(y, fs, covariance_config=covariance_config)
+result = GPY(y, fs)
 
 # get the test static and p_value
 result.test_statistic, result.p_value
@@ -59,7 +39,4 @@ result.test_statistic, result.p_value
 
 Note that this implementation assumes that the time series is complex gaussian, which removes all the terms proportional to E|X|^4 -3. A later improvement to the package could support that.
 
-
-See notebooks/howto.ipynb for an example of how to use the package 
-
-See also notebooks/leverl_power_check.ipynb for a study of the performance of this test.
+See notebooks/howto.ipynb for an example of how to use the package, and the other notebooks in the same folder for some assessment of the performance of this test.
